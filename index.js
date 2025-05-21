@@ -103,44 +103,52 @@ const getChromeExecutablePath = () => {
     console.log('ℹ️ لم تظهر نافذة "Thanks for trying ChatGPT" - متابعة التنفيذ');
   }
 
-  // الانتظار حتى يظهر مربع الدردشة في ChatGPT
-  try {
-    await page.waitForSelector('textarea', { timeout: 15000 });
-    console.log('✔ جاهز للاستخدام - يمكنك البدء بالدردشة');
-    
-    // كتابة رسالة مثال
-    await page.type('textarea', 'اهلا , كيف حالك ؟؟ظظ');
-    
-    // الضغط على زر الإرسال
-    await page.click('#composer-submit-button');
-    
-    await page.waitForSelector('div.markdown.prose.dark\\:prose-invert.w-full.break-words.dark', {
-      timeout: 30000
-    });
+  
 
-    // ثم الانتظار حتى يحتوي العنصر على نص فعلي (ليس فارغاً)
-    await page.waitForFunction(() => {
-      const element = document.querySelector('div.markdown.prose.dark\\:prose-invert.w-full.break-words.dark');
-      return element && element.textContent.trim().length > 0;
-    }, { timeout: 30000 });
+  for (let i = 0 ; i < 3 ; i++){
+      // الانتظار حتى يظهر مربع الدردشة في ChatGPT
+      try {
 
-    // إضافة تأخير إضافي 500 مللي ثانية للتأكد من اكتمال الكتابة
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    // استخراج المحتوى بعد التأكد من اكتماله
-    const response = await page.$eval(
-      'div.markdown.prose.dark\\:prose-invert.w-full.break-words.dark',
-      (el) => el.textContent
-    );
-
-    console.log('📄 رد ChatGPT:');
-    console.log(response.trim());
-    
-  } catch (error) {
-    console.error('⚠️ حدث خطأ في استخراج الرد:', error.message);
-    await page.screenshot({ path: 'response_error.png' });
-    console.log('🖼️ تم حفظ لقطة شاشة للخطأ في ملف response_error.png');
+        await page.waitForSelector('textarea', { timeout: 15000 });
+        console.log('✔ جاهز للاستخدام - يمكنك البدء بالدردشة');
+        
+        // كتابة رسالة مثال
+        await page.type('textarea', 'give me a song lyrics');
+        
+        // الضغط على زر الإرسال
+        await page.click('#composer-submit-button');
+        console.log('✔ تم إرسال الرسالة - جاري انتظار الرد...');
+        
+        // الانتظار حتى يختفي زر الإيقاف (Stop button)
+        await page.waitForSelector('button[data-testid="stop-button"]', {
+          hidden: true,
+          timeout: 60000
+        });
+        console.log('✔ اختفاء زر الإيقاف - تم اكتمال الرد');
+        
+        // إضافة تأخير قصير للتأكد من استقرار الصفحة
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // استخراج آخر رد
+        const responses = await page.$$eval(
+          'div.markdown.prose.dark\\:prose-invert.w-full.break-words.dark',
+          (elements) => elements.map(el => el.textContent.trim())
+        );
+        
+        if (responses.length > 0) {
+          console.log('📄 آخر رد ChatGPT:');
+          console.log(responses[responses.length - 1]);
+        } else {
+          console.log('⚠️ لم يتم العثور على أي ردود');
+        }
+        
+      } catch (error) {
+        console.error('⚠️ حدث خطأ في استخراج الرد:', error.message);
+        await page.screenshot({ path: 'response_error.png' });
+        console.log('🖼️ تم حفظ لقطة شاشة للخطأ في ملف response_error.png');
+      }
   }
+
 
   console.log('🏁 انتهى التشغيل - يمكنك إغلاق المتصفح يدوياً');
 })();
