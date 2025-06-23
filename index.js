@@ -51,6 +51,22 @@ const getChromeExecutablePath = () => {
 // Global variables
 let browser, page;
 
+
+// أضف هذه الدالة في بداية الكود (قبل initPuppeteer)
+const readFirstMessageFromFile = () => {
+  const filePath = path.join(__dirname, 'first_message.txt'); // يمكن تغيير المسار
+  try {
+    if (fs.existsSync(filePath)) {
+      return fs.readFileSync(filePath, 'utf-8').trim();
+    }
+    console.log('⚠️ No first_message.txt file found, skipping initial message');
+    return null;
+  } catch (error) {
+    console.error('Error reading first message file:', error);
+    return null;
+  }
+};
+
 // Initialize Puppeteer & ChatGPT
 async function initPuppeteer() {
   const chromePath = getChromeExecutablePath();
@@ -91,18 +107,11 @@ async function initPuppeteer() {
     });
   });
 
-  await page.goto('https://aistudio.google.com/generate-speech', {
-    waitUntil: 'networkidle2',
-    timeout: 60000
-  });
-
   // Open ChatGPT
-  /*
   await page.goto('https://chat.openai.com', {
     waitUntil: 'networkidle2',
     timeout: 60000
   });
-  */
 
   console.log('✅ ChatGPT is opened');
 
@@ -130,6 +139,50 @@ async function initPuppeteer() {
 
   console.log('✅ chatgpt is ready to use!');
 
+  
+  // أرسل الرسالة الأولى إذا وجدت
+
+
+
+  try {
+    const firstMessage = readFirstMessageFromFile();
+    if (firstMessage) {
+    await page.waitForSelector('textarea', { timeout: 15000 });
+    console.log('✔ جاهز للاستخدام - يمكنك البدء بالدردشة');
+    
+    // كتابة رسالة مثال
+    await page.type('textarea', firstMessage);
+    
+    // الضغط على زر الإرسال
+    await page.click('#composer-submit-button');
+    
+    await page.waitForSelector('div.markdown.prose.dark\\:prose-invert.w-full.break-words.dark', {
+      timeout: 30000
+    });
+
+    // ثم الانتظار حتى يحتوي العنصر على نص فعلي (ليس فارغاً)
+    await page.waitForFunction(() => {
+      const element = document.querySelector('div.markdown.prose.dark\\:prose-invert.w-full.break-words.dark');
+      return element && element.textContent.trim().length > 0;
+    }, { timeout: 30000 });
+
+    // إضافة تأخير إضافي 500 مللي ثانية للتأكد من اكتمال الكتابة
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    // استخراج المحتوى بعد التأكد من اكتماله
+    const response = await page.$eval(
+      'div.markdown.prose.dark\\:prose-invert.w-full.break-words.dark',
+      (el) => el.textContent
+    );
+
+    console.log('📄 رد ChatGPT:');
+    console.log(response.trim());
+    }
+
+}
+catch (error) {
+    console.error('⚠️ Error sending first message:', error.message);
+  }
 }
 
 // Send a message to ChatGPT and get response
@@ -144,15 +197,16 @@ async function sendMessageToChatGPT(message) {
       hidden: true,
       timeout: 60000
     });
-
+    
     await new Promise(resolve => setTimeout(resolve, 1000));
-
+   
     // Extract the latest response
     const responses = await page.$$eval(
       'div.markdown.prose.dark\\:prose-invert.w-full.break-words.dark',
       (elements) => elements.map(el => el.textContent.trim())
     );
-
+  
+    console.log('Response: ', responses[responses.length - 1]);
     return responses[responses.length - 1] || "No response from ChatGPT";
   } catch (error) {
     console.error('⚠️ Error:', error.message);
