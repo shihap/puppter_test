@@ -2,8 +2,24 @@ const puppeteer = require('puppeteer');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const express = require('express');
+const bodyParser = require('body-parser');
+const cors = require('cors'); // 👈 أضف دي
 
-// تحديد مسار الملف الشخصي (User Profile)
+// Initialize Express
+const app = express();
+app.use(bodyParser.json());
+
+// 👈 أضف إعدادات CORS هنا
+app.use(cors({
+  origin: 'http://localhost:3000', // السماح للـ Frontend
+  methods: ['POST'],               // السماح بالـ POST
+}));
+
+const PORT = 3001;
+
+
+// Chrome Path & Profile Setup (same as before)
 const getChromeProfilePath = () => {
   const platform = os.platform();
   if (platform === 'win32') {
@@ -15,7 +31,6 @@ const getChromeProfilePath = () => {
   }
 };
 
-// تحديد مسار Chrome
 const getChromeExecutablePath = () => {
   const paths = {
     win32: [
@@ -29,26 +44,29 @@ const getChromeExecutablePath = () => {
       '/opt/google/chrome/chrome'
     ]
   };
-
   const platformPaths = paths[os.platform()] || paths.linux;
   return platformPaths.find(p => fs.existsSync(p));
 };
 
-(async () => {
+// Global variables
+let browser, page;
+
+// Initialize Puppeteer & ChatGPT
+async function initPuppeteer() {
   const chromePath = getChromeExecutablePath();
   const profilePath = getChromeProfilePath();
 
   if (!chromePath) {
-    console.error('❌ Chrome غير مثبت على جهازك!');
-    return;
+    console.error('❌ Chrome not installed!');
+    process.exit(1);
   }
 
   if (!fs.existsSync(profilePath)) {
-    console.error('❌ لم يتم العثور على ملف التعريف الشخصي لـ Chrome');
-    return;
+    console.error('❌ Chrome profile not found');
+    process.exit(1);
   }
 
-  const browser = await puppeteer.launch({
+  browser = await puppeteer.launch({
     executablePath: chromePath,
     headless: false,
     userDataDir: profilePath,
@@ -64,91 +82,99 @@ const getChromeExecutablePath = () => {
   });
 
   const pages = await browser.pages();
-  const page = pages[0] || await browser.newPage();
+  page = pages[0] || await browser.newPage();
 
-  // إخفاء بصمة Puppeteer
+  // Hide Puppeteer fingerprint
   await page.evaluateOnNewDocument(() => {
     Object.defineProperty(navigator, 'webdriver', {
       get: () => false,
     });
   });
 
-  // فتح ChatGPT
-  await page.goto('https://chat.openai.com', {
+  await page.goto('https://aistudio.google.com/generate-speech', {
     waitUntil: 'networkidle2',
     timeout: 60000
   });
 
-  console.log('✅ تم فتح ChatGPT في متصفحك الشخصي');
+  // Open ChatGPT
+  /*
+  await page.goto('https://chat.openai.com', {
+    waitUntil: 'networkidle2',
+    timeout: 60000
+  });
+  */
 
-  // التعامل مع نافذة "Thanks for trying ChatGPT"
-  try {
-    // الانتظار حتى تظهر النافذة
-    await page.waitForSelector('div.flex.flex-col.items-center.justify-center', {
-      timeout: 10000
-    });
-    console.log('⚠️ تم اكتشاف نافذة "Thanks for trying ChatGPT"');
+  console.log('✅ ChatGPT is opened');
 
-    // النقر على "Stay logged out" باستخدام المسار الكامل
-    await page.click('div.flex.flex-col.items-center.justify-center a.text-token-text-secondary');
-    console.log('✔ تم النقر على "Stay logged out"');
-
-    // الانتظار حتى تختفي النافذة
-    await page.waitForSelector('div.flex.flex-col.items-center.justify-center', {
-      hidden: true,
-      timeout: 5000
-    });
-    console.log('✔ تم إغلاق النافذة بنجاح');
-  } catch (err) {
-    console.log('ℹ️ لم تظهر نافذة "Thanks for trying ChatGPT" - متابعة التنفيذ');
-  }
-
+    // التعامل مع نافذة "Thanks for trying ChatGPT"
+    try {
+      // الانتظار حتى تظهر النافذة
+      await page.waitForSelector('div.flex.flex-col.items-center.justify-center', {
+        timeout: 10000
+      });
+      console.log('⚠️ تم اكتشاف نافذة "Thanks for trying ChatGPT"');
   
+      // النقر على "Stay logged out" باستخدام المسار الكامل
+      await page.click('div.flex.flex-col.items-center.justify-center a.text-token-text-secondary');
+      console.log('✔ تم النقر على "Stay logged out"');
+  
+      // الانتظار حتى تختفي النافذة
+      await page.waitForSelector('div.flex.flex-col.items-center.justify-center', {
+        hidden: true,
+        timeout: 5000
+      });
+      console.log('✔ تم إغلاق النافذة بنجاح');
+    } catch (err) {
+      console.log('ℹ️ لم تظهر نافذة "Thanks for trying ChatGPT" - متابعة التنفيذ');
+    }
 
-  for (let i = 0 ; i < 3 ; i++){
-      // الانتظار حتى يظهر مربع الدردشة في ChatGPT
-      try {
+  console.log('✅ chatgpt is ready to use!');
 
-        await page.waitForSelector('textarea', { timeout: 15000 });
-        console.log('✔ جاهز للاستخدام - يمكنك البدء بالدردشة');
-        
-        // كتابة رسالة مثال
-        await page.type('textarea', 'give me a song lyrics');
-        
-        // الضغط على زر الإرسال
-        await page.click('#composer-submit-button');
-        console.log('✔ تم إرسال الرسالة - جاري انتظار الرد...');
-        
-        // الانتظار حتى يختفي زر الإيقاف (Stop button)
-        await page.waitForSelector('button[data-testid="stop-button"]', {
-          hidden: true,
-          timeout: 60000
-        });
-        console.log('✔ اختفاء زر الإيقاف - تم اكتمال الرد');
-        
-        // إضافة تأخير قصير للتأكد من استقرار الصفحة
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // استخراج آخر رد
-        const responses = await page.$$eval(
-          'div.markdown.prose.dark\\:prose-invert.w-full.break-words.dark',
-          (elements) => elements.map(el => el.textContent.trim())
-        );
-        
-        if (responses.length > 0) {
-          console.log('📄 آخر رد ChatGPT:');
-          console.log(responses[responses.length - 1]);
-        } else {
-          console.log('⚠️ لم يتم العثور على أي ردود');
-        }
-        
-      } catch (error) {
-        console.error('⚠️ حدث خطأ في استخراج الرد:', error.message);
-        await page.screenshot({ path: 'response_error.png' });
-        console.log('🖼️ تم حفظ لقطة شاشة للخطأ في ملف response_error.png');
-      }
+}
+
+// Send a message to ChatGPT and get response
+async function sendMessageToChatGPT(message) {
+  try {
+    await page.waitForSelector('textarea', { timeout: 15000 });
+    await page.type('textarea', message);
+    await page.click('#composer-submit-button');
+
+    // Wait for response
+    await page.waitForSelector('button[data-testid="stop-button"]', {
+      hidden: true,
+      timeout: 60000
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Extract the latest response
+    const responses = await page.$$eval(
+      'div.markdown.prose.dark\\:prose-invert.w-full.break-words.dark',
+      (elements) => elements.map(el => el.textContent.trim())
+    );
+
+    return responses[responses.length - 1] || "No response from ChatGPT";
+  } catch (error) {
+    console.error('⚠️ Error:', error.message);
+    return "Error: Failed to get response";
+  }
+}
+
+// API Endpoint to receive messages
+app.post('/send-message', async (req, res) => {
+  const { message } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: "Message is required" });
   }
 
+  const response = await sendMessageToChatGPT(message);
+  res.json({ response });
+});
 
-  console.log('🏁 انتهى التشغيل - يمكنك إغلاق المتصفح يدوياً');
+// Start the server & Puppeteer
+(async () => {
+  await initPuppeteer();
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
+  });
 })();
