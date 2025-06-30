@@ -12,11 +12,11 @@ app.use(bodyParser.json());
 
 // 👈 أضف إعدادات CORS هنا
 app.use(cors({
-  origin: 'http://localhost:3000', // السماح للـ Frontend
+  origin: 'http://localhost:8080', // السماح للـ Frontend
   methods: ['POST'],               // السماح بالـ POST
 }));
 
-const PORT = 3001;
+const PORT = 8081;
 
 
 // Chrome Path & Profile Setup (same as before)
@@ -143,7 +143,7 @@ async function initPuppeteer() {
   // أرسل الرسالة الأولى إذا وجدت
 
 
-
+  /*
   try {
     const firstMessage = readFirstMessageFromFile();
     if (firstMessage) {
@@ -183,6 +183,11 @@ async function initPuppeteer() {
 catch (error) {
     console.error('⚠️ Error sending first message:', error.message);
   }
+
+
+  */
+
+
 }
 
 // Send a message to ChatGPT and get response
