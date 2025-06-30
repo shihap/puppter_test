@@ -10,12 +10,12 @@ const cors = require('cors');
 const app = express();
 app.use(bodyParser.json());
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: 'http://localhost:8080',
   methods: ['POST'],
 }));
 
 // Configuration
-const PORT = process.env.PORT || 3002; // يمكن تغيير البورت عبر متغير البيئة
+const PORT = process.env.PORT || 8082; // يمكن تغيير البورت عبر متغير البيئة
 const INSTANCE_ID = process.env.INSTANCE_ID || 'default2'; // معرف النسخة
 
 // Chrome Path & Profile Setup
@@ -107,22 +107,41 @@ async function sendMessageToGoogleAI(message) {
     await page.waitForSelector('textarea[arialabel="Enter a prompt"]', { timeout: 30000 });
     await page.$eval('textarea[arialabel="Enter a prompt"]', el => el.value = '');
     await page.type('textarea[arialabel="Enter a prompt"]', message, { delay: 50 });
+
+    // احصل على src الحالي (لو موجود)
+    let oldAudioSrc = await page.evaluate(() => {
+      const audio = document.querySelector('audio');
+      return audio ? audio.src : null;
+    });
+
+    // اضغط زر التشغيل
     await page.waitForSelector('run-button', { timeout: 5000 });
     await page.click('run-button');
 
-   // انتظار ظهور الصوت
-   await page.waitForSelector('audio[src^="data:audio"]', { timeout: 30000 });
-    
-   // استخراج مصدر الصوت
-   const audioSrc = await page.$eval('audio', el => el.src);
-   
-   return audioSrc;
+    // انتظر لغاية ما src يتغير عن القديم
+    await page.waitForFunction(
+      (oldSrc) => {
+        const audio = document.querySelector('audio');
+        return audio && audio.src && audio.src.trim() !== '' && audio.src !== oldSrc;
+      },
+      { timeout: 30000 },
+      oldAudioSrc
+    );
 
- } catch (error) {
-   console.error('⚠️ Error:', error);
-   throw new Error("Failed to get audio response");
- }
+    // بعد التأكد من التغيير، اقرأ src مباشرة من DOM
+    const audioSrc = await page.evaluate(() => {
+      const audio = document.querySelector('audio');
+      return audio ? audio.src : null;
+    });
+
+    return audioSrc;
+
+  } catch (error) {
+    console.error('⚠️ Error:', error);
+    throw new Error("Failed to get audio response");
+  }
 }
+
 
 app.post('/send-message', async (req, res) => {
   try {
