@@ -6,10 +6,9 @@ const SpeechRecognition =
 const App = () => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
-  const [fullResponse, setFullResponse] = useState('');
+  const [displayedText, setDisplayedText] = useState('');
   const [inputText, setInputText] = useState('');
   const recognitionRef = useRef(null);
-  const isRecognizingRef = useRef(false);
   const shouldRestartRef = useRef(false);
 
   useEffect(() => {
@@ -27,12 +26,10 @@ const App = () => {
 
     recognition.onstart = () => {
       console.log('🎙️ الميكروفون بدأ');
-      isRecognizingRef.current = true;
     };
 
     recognition.onend = () => {
       console.log('🛑 الميكروفون توقف');
-      isRecognizingRef.current = false;
       if (shouldRestartRef.current) {
         console.log('محاولة إعادة تشغيل الميكروفون...');
         setTimeout(() => {
@@ -65,7 +62,7 @@ const App = () => {
         setTranscript(interimTranscript);
       } else if (finalTranscript.length > 0) {
         setTranscript(finalTranscript);
-        await handleTextProcessing(finalTranscript);
+        await sendToBackend(finalTranscript);
       }
     };
 
@@ -90,67 +87,53 @@ const App = () => {
   }, [isListening]);
 
   const toggleListening = () => {
-    setIsListening(prev => !prev);
+    setIsListening((prev) => !prev);
   };
 
-  const handleTextProcessing = async (text) => {
+  // دالة إرسال النص للـ backend واستقبال الرد النصي والصوتي
+  const sendToBackend = async (text) => {
     try {
-      const shortPrompt = text + ' . الرد المختصر .';
-
-      const response1 = await fetch('http://192.168.20.238:3001/send-message', {
+      // ارسال النص للـ backend
+      const response = await fetch('http://192.168.20.238:8080/send-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: shortPrompt }),
+        body: JSON.stringify({ message: text }),
       });
 
-      const data1 = await response1.json();
-      const cleanShortResponse = data1.response
-        .replace(/\n/g, ' ')
-        .replace(/[^\p{L}\p{N}\p{P}\p{Z}]/gu, '');
+      // نفترض الرد JSON فيه:
+      // { text: "النص المعروض", audioBase64: "base64string" }
+      const data = await response.json();
 
-      await Promise.all([
-        (async () => {
-          const response2 = await fetch('http://192.168.20.238:3002/send-message', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: cleanShortResponse }),
-          });
-          const audioBlob = await response2.blob();
-          const audioUrl = URL.createObjectURL(audioBlob);
-          const audio = new Audio(audioUrl);
-          audio.play();
-        })(),
+      setDisplayedText(data.text || '');
 
-        (async () => {
-          const fullPrompt = text + ' . الرد الكامل .';
-          const fullResponseRes = await fetch('http://192.168.20.238:3001/send-message', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: fullPrompt }),
-          });
-          const fullData = await fullResponseRes.json();
-          setFullResponse(fullData.response);
-        })()
-      ]);
+      if (data.audioBase64) {
+        // تحويل base64 إلى Blob
+        const audioBlob = base64ToBlob(data.audioBase64, 'audio/wav');
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        audio.play();
+      }
     } catch (error) {
-      console.error('⚠️ خطأ أثناء تنفيذ السلسلة:', error);
+      console.error('خطأ في التواصل مع الخادم:', error);
     }
   };
 
-  const speakArabic = (text) => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'ar-EG';
-    const voices = window.speechSynthesis.getVoices();
-    const arabicVoice = voices.find(v => v.lang.startsWith('ar')) || voices[0];
-    if (arabicVoice) utterance.voice = arabicVoice;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+  // دالة لتحويل base64 إلى Blob
+  const base64ToBlob = (base64, mime) => {
+    const byteChars = atob(base64);
+    const byteNumbers = new Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) {
+      byteNumbers[i] = byteChars.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    return new Blob([byteArray], { type: mime });
   };
 
+  // ارسال النص من الإدخال اليدوي
   const handleManualSend = () => {
     if (inputText.trim()) {
       setTranscript(inputText);
-      handleTextProcessing(inputText);
+      sendToBackend(inputText);
       setInputText('');
     }
   };
@@ -206,14 +189,12 @@ const App = () => {
         </p>
       </div>
 
-      {fullResponse && (
-        <div style={{ marginTop: '2rem', fontSize: '16px' }}>
-          <strong>الرد الكامل:</strong>
-          <p style={{ background: '#e0e0e0', padding: '1rem', borderRadius: '10px' }}>
-            {fullResponse}
-          </p>
-        </div>
-      )}
+      <div style={{ marginTop: '2rem', fontSize: '18px' }}>
+        <strong>النص المعروض من السيرفر:</strong>
+        <p style={{ background: '#e0e0e0', padding: '1rem', borderRadius: '10px' }}>
+          {displayedText || '...'}
+        </p>
+      </div>
     </div>
   );
 };
