@@ -1,20 +1,39 @@
 package com.example.demo;
 
-import org.springframework.core.io.ByteArrayResource;
-import org.springframework.core.io.Resource;
-import org.springframework.http.*;
+import jakarta.annotation.PostConstruct;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.HashMap;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.Base64;
+import java.util.stream.Collectors;
 
 @Service
 public class AiMediatorService {
 
     private final RestTemplate restTemplate = new RestTemplate();
+
+    @PostConstruct
+    public void init() {
+        try {
+            // قراءة محتوى ملف memory.txt
+            ClassPathResource resource = new ClassPathResource("memory.txt");
+            String message = new BufferedReader(new InputStreamReader(resource.getInputStream()))
+                    .lines().collect(Collectors.joining(" "));
+
+            // إرسال للـ LLM وعرض الرد
+            String reply = sendToLLM(message);
+            System.out.println("🧠 رد LLM: " + reply);
+
+        } catch (Exception e) {
+            System.err.println("❌ فشل في قراءة ملف memory.txt أو في الاتصال بـ LLM: " + e.getMessage());
+        }
+    }
 
     public Map<String, String> processMessage(String message) throws Exception {
         // 1. الرد المختصر
@@ -38,8 +57,8 @@ public class AiMediatorService {
         String audioBase64 = audioFuture.get();
 
         return Map.of(
-            "text", fullReply,
-            "audioBase64", audioBase64
+                "text", fullReply,
+                "audioBase64", audioBase64
         );
     }
 
